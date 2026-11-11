@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>الأسطى كشري</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; background: #0a0a12; color: #fff; font-family: 'Segoe UI', Tahoma, sans-serif; }
+  #viewer { position: fixed; inset: 0; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #viewer canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  .panel { position: absolute; background: rgba(18,18,32,.92); border: 1px solid rgba(255,204,0,.25); border-radius: 14px; padding: 14px; width: 250px; max-height: calc(100% - 150px); overflow-y: auto; z-index: 2; }
+  #stock-panel { top: 80px; left: 16px; }
+  #plate-panel { top: 80px; right: 16px; }
+  .panel h3 { color: #ffcc00; margin-bottom: 10px; font-size: 16px; }
+  .panel h4 { color: #ffcc00; margin: 12px 0 6px; font-size: 14px; }
+  .stat { font-size: 14px; padding: 3px 0; color: #ddd; }
+
+  #hud { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 16px; background: rgba(0,0,0,.6); padding: 8px 20px; border-radius: 20px; font-size: 15px; z-index: 2; white-space: nowrap; }
+  #hud b { color: #ffcc00; }
+
+  .btn { display: block; width: 100%; padding: 9px 12px; margin: 6px 0; background: rgba(255,255,255,.07); border: 1px solid rgba(255,204,0,.3); border-radius: 10px; color: #fff; font-family: inherit; font-size: 14px; text-align: right; cursor: pointer; }
+  .btn:hover:not(:disabled) { background: rgba(255,204,0,.15); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn.active { background: rgba(255,204,0,.35); border-color: #ffcc00; }
+
+  #hint { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.6); color: #bbb; padding: 7px 16px; border-radius: 16px; font-size: 13px; z-index: 2; white-space: nowrap; pointer-events: none; }
+  #crosshair { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,.7); z-index: 2; pointer-events: none; }
+
+  #log { position: absolute; top: 140px; left: 50%; transform: translateX(-50%); width: 420px; max-width: 90%; display: flex; flex-direction: column-reverse; gap: 4px; z-index: 2; pointer-events: none; }
+  #log div { background: rgba(0,0,0,.7); padding: 6px 12px; border-radius: 10px; font-size: 14px; text-align: center; }
+
+  #bubbles { position: absolute; inset: 0; pointer-events: none; z-index: 1; overflow: hidden; }
+  .bubble { position: absolute; transform: translate(-50%, -100%); background: #fff; color: #222; padding: 6px 10px; border-radius: 10px; font-size: 14px; white-space: nowrap; display: none; }
+  .bubble .pbar { height: 4px; background: #ddd; margin-top: 4px; border-radius: 2px; overflow: hidden; }
+  .bubble .pbar i { display: block; height: 100%; background: #2ecc71; }
+
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; z-index: 10; }
+  .overlay[hidden] { display: none; }
+  .box { background: #151525; border: 1px solid rgba(255,204,0,.4); border-radius: 16px; padding: 22px; width: 420px; max-width: 94%; max-height: 88%; overflow-y: auto; text-align: right; }
+  .box h2 { color: #ffcc00; margin-bottom: 10px; text-align: center; }
+  .box h3 { color: #ffcc00; margin: 14px 0 6px; font-size: 16px; }
+  .box p, .box li { color: #ccc; font-size: 14px; line-height: 1.9; }
+  .box ul { padding-right: 18px; margin-bottom: 6px; }
+  .box .stats { color: #ccc; margin-bottom: 10px; font-size: 14px; line-height: 1.8; text-align: center; }
+  .box .btn { text-align: center; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 8px; }
+  .tabs .btn { margin: 0; text-align: center; }
+  .tabs .btn.active { background: rgba(255,204,0,.35); }
+  .tab-body[hidden] { display: none; }
+  .card { background: rgba(255,255,255,.04); border: 1px solid rgba(255,204,0,.2); border-radius: 12px; padding: 10px; margin-bottom: 12px; }
+  .card img { width: 100%; border-radius: 10px; display: block; margin-bottom: 6px; }
+  .card.locked img { filter: grayscale(1) opacity(.6); }
+  .card h3 { color: #ffcc00; font-size: 15px; margin: 4px 0; }
+  .card p, .card li { font-size: 13px; color: #ccc; line-height: 1.7; }
+  .card ul, .card ol { padding-right: 18px; }
+
+  @media (max-width: 800px), (pointer: coarse) {
+    .panel { width: 150px; padding: 8px; font-size: 12px; top: auto; bottom: 10px; max-height: 40%; }
+    .panel h3 { font-size: 13px; margin-bottom: 6px; }
+    .panel h4 { font-size: 12px; margin: 8px 0 4px; }
+    .stat { font-size: 11px; padding: 1px 0; }
+    #stock-panel { left: 8px; }
+    #plate-panel { right: 8px; }
+    .btn { font-size: 12px; padding: 7px 8px; margin: 4px 0; }
+    #hud { top: 8px; font-size: 12px; gap: 8px; padding: 6px 12px; }
+    #hint { display: none; }
+    #log { top: 52px; width: 92%; }
+    #log div { font-size: 12px; padding: 5px 8px; }
+    .box { padding: 14px; }
+    .box p, .box li { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<div id="viewer"></div>
+
+<div id="hud">
+  <div>💰 <b id="money">0</b> ج</div>
+  <div>📅 يوم <b id="day">1</b></div>
+  <div>⭐ <b id="rep"></b></div>
+  <div>⏳ <b id="clock">05:00</b></div>
+</div>
+
+<div id="stock-panel" class="panel">
+  <h3>📦 المخزون</h3>
+  <div id="stock-list"></div>
+  <h4>📖 الوصفات</h4>
+  <div id="recipes-list"></div>
+  <button class="btn" id="btn-shop-open">🛒 المتجر</button>
+  <button class="btn" id="btn-view">🎥 كاميرا حرة</button>
+  <button class="btn" id="btn-book">📕 كتيب الوصفات</button>
+  <button class="btn" id="btn-guide">📘 التعليمات</button>
+</div>
+
+<div id="plate-panel" class="panel">
+  <h3>🍽️ الطبق على الشغل</h3>
+  <div id="plate-list" class="stat">فاضي</div>
+  <button class="btn" id="btn-finish">✅ خلّص الطبق وحطه على النار</button>
+  <button class="btn" id="btn-clear">🗑️ افضي الطبق</button>
+  <h4>🔥 على النار</h4>
+  <div id="cook-list" class="stat">البوتاجاز فاضي</div>
+</div>
+
+<div id="crosshair"></div>
+<div id="hint">دوس على طبق من الرف عشان تشيله • دوس على المكونات عشان تضيفها للطبق اللي في إيدك • دوس على البوتاجاز عشان تحضّر • دوس على الزبون عشان تديله • اسحب عشان تبص حواليك</div>
+<div id="log"></div>
+<div id="bubbles"></div>
+
+<div id="modal" class="overlay" hidden>
+  <div class="box">
+    <h2>🛒 المتجر</h2>
+    <div id="modal-body"></div>
+    <button class="btn" id="modal-close">إغلاق</button>
+  </div>
+</div>
+
+<div id="eod" class="overlay" hidden>
+  <div class="box">
+    <h2>🌙 خلص اليوم</h2>
+    <div class="stats" id="eod-stats"></div>
+    <button class="btn" id="btn-shop">🛒 اشتري</button>
+    <button class="btn" id="btn-skip">⏭️ تخطي اليوم وابدأ يوم جديد</button>
+  </div>
+</div>
+
+<div id="book" class="overlay" hidden>
+  <div class="box">
+    <h2>📕 كتيب الوصفات</h2>
+    <div id="book-body"></div>
+    <button class="btn" id="book-close">إغلاق</button>
+  </div>
+</div>
+
+<div id="guide" class="overlay" hidden>
+  <div class="box">
+    <h2>📘 كتاب التعليمات</h2>
+    <div class="tabs">
+      <button class="btn active" data-tab="general">أساسيات</button>
+      <button class="btn" data-tab="pc">💻 الكمبيوتر</button>
+      <button class="btn" data-tab="mobile">📱 الموبايل</button>
+    </div>
+
+    <div class="tab-body" id="tab-general">
+      <h3>الهدف</h3>
+      <p>إنت الأسطى. ابدأ بعربية كشري صغيرة وكبّر الشغل لحد ما تبقى عندك سلسلة مطاعم. الزباين بيجيوا يطلبوا، وإنت بتحضّر الطبق وتديهولهم وتكسب فلوس.</p>
+      <h3>الوصفات والطبق</h3>
+      <ul>
+        <li>كل طبق ليه وصفة مكوّنات بالظبط، زي كشري صغير: أرز ومكرونة وعدس وصلصة وبصل.</li>
+        <li>لما المكونات تبقى مطابقة للوصفة وتدوس "خلّص الطبق"، الطبق يتحط على النار ويخلص بعد وقت، وبعدين يتحط على الترابيزة.</li>
+        <li>لو المكونات مش وصفة، الطبق بيتهدر وبيقل التقييم.</li>
+        <li>كتيب الوصفات (من زرار 📕) فيه صورة وقائمة مكونات وخطوات لكل طبق.</li>
+      </ul>
+      <h3>الزباين</h3>
+      <ul>
+        <li>كل زبون فوق راسه طلبه وشريط صبر. الشريط بيقل مع الوقت.</li>
+        <li>لو الصبر خلص، الزبون بيمشي والتقييم بيقل.</li>
+        <li>التقييم بيحدد عدد الزباين اللي بييجوا.</li>
+      </ul>
+      <h3>اليوم والوقت</h3>
+      <ul>
+        <li>كل يوم 5 دقايق. بعد 3:30 الغروب والزباين بيقلّوا وبيتأخروا.</li>
+        <li>لما اليوم يخلص تقدر تفتح المتجر تشتري مكونات وأطباق جديدة ومعدات، أو تخطي اليوم وتبدأ يوم جديد.</li>
+      </ul>
+      <h3>المتجر</h3>
+      <ul>
+        <li>المكونات بتتباع بالحزمة (5 وحدات).</li>
+        <li>الأطباق الجديدة (كشري كبير، بطاطس سوري، عصير، شاي) بتتفتح بفلوس.</li>
+        <li>البوتاجاز الإضافي بيحضّر طبقين في نفس الوقت، واللافتة بتجيب زباين أكتر.</li>
+      </ul>
+      <h3>الحفظ</h3>
+      <p>اللعبة بتحفظ تلقائي في المتصفح. الطبق اللي على الشغل بيتفضى لو قفلت الصفحة، وباقي التقدم بيتحفظ.</p>
+    </div>
+
+    <div class="tab-body" id="tab-pc" hidden>
+      <h3>الحركة والإيد</h3>
+      <ul>
+        <li>حرّك الماوس، إيدك بتمشي مع المؤشر.</li>
+        <li>دوس على صندوق مكون عشان تاخده في إيدك.</li>
+        <li>دوس على الطبق عشان المكون يتحط فيه. ولو إيدك فاضية ودوست على الطبق، بتاخد آخر مكون اتحط.</li>
+        <li>لو شايل مكون ودوست على مكان فاضي، المكون بيرجع للمخزون.</li>
+      </ul>
+      <h3>الأطباق والزباين</h3>
+      <ul>
+        <li>دوس على طبق من الترابيزة اللي على اليمين عشان تشيله.</li>
+        <li>دوس على الزبون عشان تديله الطبق. دوس على الترابيزة عشان ترجّع الطبق.</li>
+      </ul>
+      <h3>الكاميرا</h3>
+      <ul>
+        <li>اسحب بالماوس عشان تبص يمين وشمال وفوق وتحت.</li>
+        <li>زرار "كاميرا حرة" في القائمة اليسار بيعرض المشهد من بعيد، وتقدر تدوّر بالماوس وتقرّب بعجلة الماوس.</li>
+      </ul>
+      <h3>نصيحة</h3>
+      <p>حضّر المكونات بهدوء. الطبق الغلط بيخسّرك تقييم، والزبون اللي صبره يخلص بيمشي.</p>
+    </div>
+
+    <div class="tab-body" id="tab-mobile" hidden>
+      <h3>اللمس</h3>
+      <ul>
+        <li>لمسة واحدة = ضغطة. المس مكون عشان تاخده، والمس الطبق عشان تحط فيه.</li>
+        <li>إيدك بتروح للمكان اللي بتلمسه، فاستنى لحظة عشان تشوف الإيد وهي بتوصل.</li>
+        <li>اسحب بصباع واحد عشان تبص حواليك في عين الأسطى.</li>
+      </ul>
+      <h3>الكاميرا الحرة</h3>
+      <ul>
+        <li>زرار "كاميرا حرة" في القائمة اليسار بيعرض المشهد من بعيد.</li>
+        <li>اسحب بصباع واحد للدوران، وقرّب أو بعّد بصباعين.</li>
+      </ul>
+      <h3>الشاشة</h3>
+      <ul>
+        <li>لف الموبايل أفقي عشان تشوف المشهد والقوايم براحة.</li>
+        <li>القوايم اتصغّرت تحت. لو مش واضحة، اقفل التعليمات وخلي الشاشة نضيفة.</li>
+      </ul>
+    </div>
+
+    <button class="btn" id="guide-close">فهمت، ابدأ</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="game.js"></script>
+</body>
+</html>
